@@ -9,9 +9,11 @@ import { formatNumber } from '../format';
 import { navigate } from '../hooks/useRoute';
 import { decodeBarcodeFromImage, isValidGtin, startScanner, type ScannerHandle } from '../services/barcode';
 import { fetchProductByBarcode } from '../services/openFoodFacts';
+import { CheckCard } from './CheckCard';
 import { NutriScore, ProductThumb } from './common';
 
-export type ScannerMode = 'list' | 'product';
+/** list = auf die Liste setzen, product = nachschlagen, check = im Laden scannen & abhaken. */
+export type ScannerMode = 'list' | 'product' | 'check';
 
 type Lookup =
   | { state: 'idle' }
@@ -23,11 +25,14 @@ type Lookup =
 export function BarcodeScanner({
   mode,
   listId,
+  targetItemId,
   onClose,
   onToast,
 }: {
   mode: ScannerMode;
   listId?: number;
+  /** Beim Abhaken: gezielt dieser Listeneintrag. */
+  targetItemId?: number;
   onClose: () => void;
   onToast: (msg: string) => void;
 }) {
@@ -41,6 +46,9 @@ export function BarcodeScanner({
   const [lookup, setLookup] = useState<Lookup>({ state: 'idle' });
   const [scanning, setScanning] = useState(true);
   const list = useLiveQuery(() => (listId ? db.lists.get(listId) : undefined), [listId]);
+  const store = useLiveQuery(() => (list?.storeId ? db.stores.get(list.storeId) : undefined), [list?.storeId]);
+  const targetItem = useLiveQuery(() => (targetItemId ? db.items.get(targetItemId) : undefined), [targetItemId]);
+  const checking = mode === 'check' && Boolean(listId);
 
   const resolve = useCallback(async (code: string) => {
     setScanning(false);
@@ -157,7 +165,13 @@ export function BarcodeScanner({
         <div className="grow">
           <strong>Barcode scannen</strong>
           <div className="tiny" style={{ opacity: 0.8 }}>
-            {mode === 'list' && list ? `Fügt zu „${list.name}“ hinzu` : 'Produkt nachschlagen & speichern'}
+            {checking
+              ? targetItem
+                ? `Für „${targetItem.name}“${store ? ` · ${store.name}` : ''}`
+                : `Scannen & abhaken${store ? ` · ${store.name}` : ''}`
+              : mode === 'list' && list
+                ? `Fügt zu „${list.name}“ hinzu`
+                : 'Produkt nachschlagen & speichern'}
           </div>
         </div>
         {torchAvailable && (
@@ -170,7 +184,23 @@ export function BarcodeScanner({
       <div className="scanner-bottom stack">
         {cameraError && <div className="notice warn">{cameraError}</div>}
 
-        {lookup.state !== 'idle' && (
+        {checking && listId && (lookup.state === 'found' || lookup.state === 'unknown') ? (
+          <div className="card card-pad" style={{ color: 'var(--text)', maxHeight: '62dvh', overflowY: 'auto' }}>
+            <CheckCard
+              key={lookup.code}
+              barcode={lookup.code}
+              product={lookup.state === 'found' ? lookup.product : undefined}
+              listId={listId}
+              targetItemId={targetItemId}
+              onCancel={resume}
+              onDone={(message, remaining) => {
+                onToast(remaining === 0 ? `${message} · alles im Wagen 🎉` : message);
+                if (remaining === 0 || targetItemId) onClose();
+                else resume();
+              }}
+            />
+          </div>
+        ) : lookup.state !== 'idle' && (
           <div className="card card-pad" style={{ color: 'var(--text)' }}>
             {lookup.state === 'loading' && (
               <div className="row">

@@ -27,6 +27,7 @@ export function ExpensesScreen() {
   const stores = useStores();
   const receipts = useLiveQuery(() => db.receipts.orderBy('date').reverse().toArray());
   const receiptItems = useLiveQuery(() => db.receiptItems.toArray()) ?? [];
+  const shelfPrices = useLiveQuery(() => db.prices.toArray()) ?? [];
   const products = useLiveQuery(() => db.products.toArray()) ?? [];
   const [month, setMonth] = useState(monthKey(Date.now()));
 
@@ -90,6 +91,11 @@ export function ExpensesScreen() {
       list.push({ date: i.date, unitPrice: i.unitPrice });
       byProduct.set(i.productId, list);
     }
+    for (const s of shelfPrices) {
+      const list = byProduct.get(s.productId) ?? [];
+      list.push({ date: s.date, unitPrice: s.unitPrice });
+      byProduct.set(s.productId, list);
+    }
     const result: Array<{ productId: number; name: string; trend: number; last: number; nutriscore?: string }> = [];
     for (const [pid, points] of byProduct) {
       const s = priceStats(points);
@@ -98,7 +104,7 @@ export function ExpensesScreen() {
       if (p) result.push({ productId: pid, name: p.name, trend: s.trend, last: s.last, nutriscore: p.nutriscore });
     }
     return result.sort((a, b) => Math.abs(b.trend) - Math.abs(a.trend)).slice(0, 6);
-  }, [receiptItems, products]);
+  }, [receiptItems, shelfPrices, products]);
 
   // Nutri-Score-Verteilung der gekauften Produkte im Monat (nach Ausgaben).
   const nutri = useMemo(() => {

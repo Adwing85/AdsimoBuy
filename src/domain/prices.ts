@@ -73,3 +73,36 @@ export function estimateTotal(
   }
   return { total: round2(total), known, unknown };
 }
+
+export interface ProductPricePoint {
+  productId: number;
+  storeId?: number;
+  date: number;
+  unitPrice: number;
+}
+
+export interface LatestPrice {
+  price: number;
+  date: number;
+}
+
+export interface ProductPrices {
+  latest: LatestPrice;
+  byStore: Map<number, LatestPrice>;
+}
+
+/** Letzter bekannter Preis je Produkt – gesamt und je Markt. */
+export function latestPrices(points: readonly ProductPricePoint[]): Map<number, ProductPrices> {
+  const result = new Map<number, ProductPrices>();
+  for (const p of points) {
+    if (!(p.unitPrice > 0)) continue;
+    const entry = result.get(p.productId) ?? { latest: { price: p.unitPrice, date: p.date }, byStore: new Map<number, LatestPrice>() };
+    if (p.date >= entry.latest.date) entry.latest = { price: p.unitPrice, date: p.date };
+    if (p.storeId !== undefined) {
+      const current = entry.byStore.get(p.storeId);
+      if (!current || p.date >= current.date) entry.byStore.set(p.storeId, { price: p.unitPrice, date: p.date });
+    }
+    result.set(p.productId, entry);
+  }
+  return result;
+}
