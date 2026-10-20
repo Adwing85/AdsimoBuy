@@ -325,6 +325,19 @@ export async function addShelfPrice(productId: number, storeId: number | undefin
   await refreshLastPrice(productId);
 }
 
+/** Entfernt Einträge und gibt sie für "Rückgängig" zurück. */
+export async function removeItems(ids: number[]): Promise<ListItem[]> {
+  return db.transaction('rw', db.items, async () => {
+    const items = (await db.items.bulkGet(ids)).filter((i): i is ListItem => i !== undefined);
+    await db.items.bulkDelete(ids);
+    return items;
+  });
+}
+
+export async function restoreItems(items: ListItem[]): Promise<void> {
+  await db.items.bulkPut(items);
+}
+
 export async function clearChecked(listId: number): Promise<void> {
   await db.items.where('[listId+checked]').equals([listId, 1]).delete();
 }

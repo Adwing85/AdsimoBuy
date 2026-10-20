@@ -1,13 +1,32 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Barcode, Camera, Check, ChefHat, ChevronDown, ListPlus, MoreVertical, Plus, ReceiptText, ScanBarcode, Sparkles, Trash2 } from 'lucide-react';
+import {
+  Barcode,
+  Camera,
+  Check,
+  ChefHat,
+  ChevronDown,
+  Circle,
+  CircleCheck,
+  ListPlus,
+  ListX,
+  MoreVertical,
+  Plus,
+  ReceiptText,
+  ScanBarcode,
+  Sparkles,
+  SquareCheckBig,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { CategorySelect, Empty, ProductThumb, Progress, Sheet } from '../components/common';
 import { db } from '../db/db';
 import {
   addItems,
-  clearChecked,
   createList,
   deleteList,
+  removeItems,
+  restoreItems,
   setItemChecked,
   setSetting,
   updateItem,
@@ -56,6 +75,8 @@ export function ListScreen() {
   const [focused, setFocused] = useState(false);
   const [editing, setEditing] = useState<ListItem | null>(null);
   const [listMenu, setListMenu] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const inputRef = useRef<HTMLInputElement>(null);
 
   const open = items.filter((i) => !i.checked);
@@ -127,26 +148,74 @@ export function ListScreen() {
     setItemChecked(item, !item.checked, list.storeId);
   };
 
+  /** Entfernt Einträge sofort; "Rückgängig" im Hinweis stellt sie wieder her. */
+  const removeMany = async (toRemove: ListItem[]) => {
+    const ids = toRemove.map((i) => i.id).filter((id): id is number => id !== undefined);
+    if (!ids.length) return;
+    const removed = await removeItems(ids);
+    const label = removed.length === 1 ? `„${removed[0].name}“ entfernt` : `${removed.length} Einträge entfernt`;
+    ui.toast(label, { label: 'Rückgängig', run: () => restoreItems(removed) });
+  };
+
   const remove = async (item: ListItem) => {
-    if (!item.id) return;
-    await db.items.delete(item.id);
     setEditing(null);
-    ui.toast(`„${item.name}“ entfernt`, { label: 'Rückgängig', run: () => db.items.add({ ...item }) });
+    await removeMany([item]);
+  };
+
+  const toggleSelected = (item: ListItem) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (item.id === undefined) return next;
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelected(new Set());
+  };
+
+  const removeSelected = async () => {
+    await removeMany(items.filter((i) => i.id !== undefined && selected.has(i.id)));
+    exitSelect();
   };
 
   const progress = items.length ? done.length / items.length : 0;
 
   return (
     <>
-      <header className="topbar">
-        <button className="btn ghost grow" style={{ justifyContent: 'flex-start', padding: 0, minWidth: 0 }} onClick={() => setListMenu(true)}>
-          <h1 style={{ flex: 'none', maxWidth: '100%' }}>{list.name}</h1>
-          <ChevronDown size={20} className="muted" style={{ flex: 'none' }} />
-        </button>
-        <button className="icon-btn" aria-label="Liste verwalten" onClick={() => setListMenu(true)}>
-          <MoreVertical size={22} />
-        </button>
-      </header>
+      {selectMode ? (
+        <header className="topbar">
+          <button className="icon-btn back" aria-label="Auswahl beenden" onClick={exitSelect}>
+            <X size={22} />
+          </button>
+          <h1>{selected.size ? `${selected.size} ausgewählt` : 'Einträge auswählen'}</h1>
+          <button
+            className="btn ghost small"
+            onClick={() =>
+              setSelected(selected.size === items.length ? new Set() : new Set(items.map((i) => i.id).filter((id): id is number => id !== undefined)))
+            }
+          >
+            {selected.size === items.length ? 'Keine' : 'Alle'}
+          </button>
+        </header>
+      ) : (
+        <header className="topbar">
+          <button className="btn ghost grow" style={{ justifyContent: 'flex-start', padding: 0, minWidth: 0 }} onClick={() => setListMenu(true)}>
+            <h1 style={{ flex: 'none', maxWidth: '100%' }}>{list.name}</h1>
+            <ChevronDown size={20} className="muted" style={{ flex: 'none' }} />
+          </button>
+          {items.length > 0 && (
+            <button className="icon-btn" aria-label="Einträge auswählen und entfernen" onClick={() => setSelectMode(true)}>
+              <SquareCheckBig size={21} />
+            </button>
+          )}
+          <button className="icon-btn" aria-label="Liste verwalten" onClick={() => setListMenu(true)}>
+            <MoreVertical size={22} />
+          </button>
+        </header>
+      )}
 
       <div className="page">
         <div className="chips" role="group" aria-label="Markt auswählen">
@@ -301,8 +370,11 @@ export function ListScreen() {
                 item={item}
                 product={item.productId ? productById.get(item.productId) : undefined}
                 price={priceFor(item.productId)}
-                onToggle={toggle}
-                onEdit={setEditing}
+                selectMode={selectMode}
+                selected={item.id !== undefined && selected.has(item.id)}
+                onToggle={selectMode ? toggleSelected : toggle}
+                onEdit={selectMode ? toggleSelected : setEditing}
+                onRemove={remove}
               />
             ))}
           </section>
@@ -312,9 +384,11 @@ export function ListScreen() {
           <>
             <div className="section-title">
               <Check size={14} /> Im Wagen ({done.length})<span className="spacer" />
-              <button className="btn ghost small" onClick={() => clearChecked(activeListId)}>
-                <Trash2 size={16} /> Leeren
-              </button>
+              {!selectMode && (
+                <button className="btn ghost small" onClick={() => removeMany(done)}>
+                  <Trash2 size={16} /> Leeren
+                </button>
+              )}
             </div>
             <section className="card group">
               {done.map((item) => (
@@ -323,8 +397,11 @@ export function ListScreen() {
                 item={item}
                 product={item.productId ? productById.get(item.productId) : undefined}
                 price={priceFor(item.productId)}
-                onToggle={toggle}
-                onEdit={setEditing}
+                selectMode={selectMode}
+                selected={item.id !== undefined && selected.has(item.id)}
+                onToggle={selectMode ? toggleSelected : toggle}
+                onEdit={selectMode ? toggleSelected : setEditing}
+                onRemove={remove}
               />
               ))}
             </section>
@@ -343,6 +420,7 @@ export function ListScreen() {
             )}
           </>
         )}
+        {selectMode && <div style={{ height: 72 }} aria-hidden="true" />}
       </div>
 
       {editing && (
@@ -359,10 +437,26 @@ export function ListScreen() {
         />
       )}
 
+      {selectMode && (
+        <div className="select-bar">
+          <div className="select-bar-inner">
+            <button className="btn" onClick={exitSelect}>
+              Abbrechen
+            </button>
+            <button className="btn danger grow" disabled={selected.size === 0} onClick={removeSelected}>
+              <Trash2 size={18} /> {selected.size ? `${selected.size} entfernen` : 'Entfernen'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {listMenu && (
         <ListMenu
           currentId={activeListId}
           lists={lists}
+          itemCount={items.length}
+          onClearAll={() => removeMany(items)}
+          onSelect={() => setSelectMode(true)}
           onClose={() => setListMenu(false)}
           onToast={ui.toast}
         />
@@ -377,47 +471,140 @@ interface ItemPrice {
   storeName?: string;
 }
 
+/** Ab dieser Wischstrecke (px) wird ein Eintrag beim Loslassen entfernt. */
+const SWIPE_REMOVE = 96;
+
 function ItemRow({
   item,
   product,
   price,
+  selectMode,
+  selected,
   onToggle,
   onEdit,
+  onRemove,
 }: {
   item: ListItem;
   product?: Product;
   price?: ItemPrice;
+  selectMode: boolean;
+  selected: boolean;
   onToggle: (i: ListItem) => void;
   onEdit: (i: ListItem) => void;
+  onRemove: (i: ListItem) => void;
 }) {
+  const [dx, setDx] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const gesture = useRef<{ x: number; y: number; swiping: boolean } | null>(null);
+  const swiped = useRef(false);
+
+  // Nach links wischen entfernt den Eintrag. Vertikales Scrollen bleibt unberührt.
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (selectMode || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    gesture.current = { x: e.clientX, y: e.clientY, swiping: false };
+    swiped.current = false;
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g) return;
+    const ddx = e.clientX - g.x;
+    const ddy = e.clientY - g.y;
+    if (!g.swiping) {
+      if (Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy) * 1.5) {
+        g.swiping = true;
+        setDragging(true);
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } else if (Math.abs(ddy) > 10) {
+        gesture.current = null;
+        return;
+      }
+    }
+    if (g.swiping) {
+      swiped.current = true;
+      setDx(Math.min(0, ddx));
+    }
+  };
+  const onPointerEnd = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g?.swiping) return;
+    setDragging(false);
+    if (dx <= -SWIPE_REMOVE) {
+      navigator.vibrate?.(20);
+      setDx(-e.currentTarget.offsetWidth);
+      setTimeout(() => onRemove(item), 160);
+    } else {
+      setDx(0);
+    }
+  };
+
   return (
-    <div className={`item${item.checked ? ' done' : ''}`}>
-      <button
-        className="check"
-        onClick={() => onToggle(item)}
-        aria-label={item.checked ? `${item.name} zurück auf die Liste` : `${item.name} abhaken`}
-        aria-pressed={Boolean(item.checked)}
+    <div className="swipe">
+      <div
+        className={`swipe-action${dx <= -SWIPE_REMOVE ? ' armed' : ''}`}
+        aria-hidden="true"
+        style={{ opacity: Math.min(1, -dx / SWIPE_REMOVE) }}
       >
-        <Check size={16} strokeWidth={3} />
-      </button>
-      <div className="item-main" onClick={() => onEdit(item)}>
-        <div className="item-name">
-          {item.quantity && <span className="qty">{item.quantity} </span>}
-          {item.name}
-        </div>
-        {(item.note || product?.brand || price) && (
-          <div className="item-meta">
-            {product?.brand && <span>{product.brand}</span>}
-            {price ? (
-              <span className="num">
-                {price.storeName ? `bei ${price.storeName}` : 'zuletzt'} {formatEuro(price.price)}
-              </span>
-            ) : null}
-            {item.note && <span>{item.note}</span>}
-          </div>
-        )}
+        <Trash2 size={20} /> Entfernen
       </div>
-      {product?.imageUrl && <ProductThumb imageUrl={product.imageUrl} category={product.category} />}
+      <div
+        className={`item${item.checked ? ' done' : ''}${selected ? ' selected' : ''}`}
+        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: dragging ? 'none' : 'transform 0.18s ease' }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={() => {
+          gesture.current = null;
+          setDragging(false);
+          setDx(0);
+        }}
+        onClickCapture={(e) => {
+          // Ein Wischvorgang soll nicht zusätzlich abhaken oder den Editor öffnen.
+          if (swiped.current) {
+            e.stopPropagation();
+            e.preventDefault();
+            swiped.current = false;
+          }
+        }}
+      >
+        {selectMode ? (
+          <button
+            className="check select"
+            onClick={() => onToggle(item)}
+            aria-label={`${item.name} ${selected ? 'abwählen' : 'auswählen'}`}
+            aria-pressed={selected}
+          >
+            {selected ? <CircleCheck size={28} /> : <Circle size={28} />}
+          </button>
+        ) : (
+          <button
+            className="check"
+            onClick={() => onToggle(item)}
+            aria-label={item.checked ? `${item.name} zurück auf die Liste` : `${item.name} abhaken`}
+            aria-pressed={Boolean(item.checked)}
+          >
+            <Check size={16} strokeWidth={3} />
+          </button>
+        )}
+        <div className="item-main" onClick={() => onEdit(item)}>
+          <div className="item-name">
+            {item.quantity && <span className="qty">{item.quantity} </span>}
+            {item.name}
+          </div>
+          {(item.note || product?.brand || price) && (
+            <div className="item-meta">
+              {product?.brand && <span>{product.brand}</span>}
+              {price ? (
+                <span className="num">
+                  {price.storeName ? `bei ${price.storeName}` : 'zuletzt'} {formatEuro(price.price)}
+                </span>
+              ) : null}
+              {item.note && <span>{item.note}</span>}
+            </div>
+          )}
+        </div>
+        {product?.imageUrl && <ProductThumb imageUrl={product.imageUrl} category={product.category} />}
+      </div>
     </div>
   );
 }
@@ -505,11 +692,17 @@ function ItemEditor({
 function ListMenu({
   currentId,
   lists,
+  itemCount,
+  onClearAll,
+  onSelect,
   onClose,
   onToast,
 }: {
   currentId: number;
   lists: Array<{ id?: number; name: string }>;
+  itemCount: number;
+  onClearAll: () => void;
+  onSelect: () => void;
   onClose: () => void;
   onToast: (m: string) => void;
 }) {
@@ -562,6 +755,28 @@ function ListMenu({
             Umbenennen
           </button>
         </form>
+        {itemCount > 0 && (
+          <div className="grid-2">
+            <button
+              className="btn"
+              onClick={() => {
+                onClose();
+                onSelect();
+              }}
+            >
+              <SquareCheckBig size={18} /> Auswählen
+            </button>
+            <button
+              className="btn"
+              onClick={() => {
+                onClose();
+                onClearAll();
+              }}
+            >
+              <ListX size={18} /> Alle {itemCount} entfernen
+            </button>
+          </div>
+        )}
         <button
           className="btn danger"
           onClick={async () => {
