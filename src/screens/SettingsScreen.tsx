@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ChevronRight, Download, KeyRound, Loader2, Plus, ShieldCheck, Upload } from 'lucide-react';
+import { ChevronRight, Download, KeyRound, Loader2, Plus, RefreshCw, ShieldCheck, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { db } from '../db/db';
 import { addStore, exportBackup, importBackup, resetAll, setSetting, type OcrMode } from '../db/repo';
@@ -24,6 +24,26 @@ export function SettingsScreen() {
   const [keyBusy, setKeyBusy] = useState(false);
   const [keyMessage, setKeyMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
+
+  const checkForUpdate = async () => {
+    const registration = await navigator.serviceWorker?.getRegistration();
+    if (!registration) {
+      ui.toast('Updates werden nur in der installierten Web-App geprüft.');
+      return;
+    }
+    setUpdateBusy(true);
+    try {
+      await registration.update();
+      // Ein gefundenes Update wird installiert und lädt die App anschließend selbst neu.
+      if (registration.installing || registration.waiting) ui.toast('Update gefunden – die App startet gleich neu');
+      else ui.toast(`Du hast die neueste Version (${__APP_VERSION__})`);
+    } catch {
+      ui.toast('Update-Prüfung fehlgeschlagen – bist du online?');
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
 
   const saveKey = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -214,8 +234,13 @@ export function SettingsScreen() {
 
         <div className="section-title">Über</div>
         <div className="card card-pad small text-2 stack" style={{ gap: 6 }}>
-          <div>
-            <strong>AdsimoBuy</strong> · Version {__APP_VERSION__}
+          <div className="row">
+            <span className="grow">
+              <strong>AdsimoBuy</strong> · Version {__APP_VERSION__}
+            </span>
+            <button className="btn small" onClick={checkForUpdate} disabled={updateBusy}>
+              {updateBusy ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} Nach Update suchen
+            </button>
           </div>
           <div>
             Tipp: Über „Zum Startbildschirm hinzufügen“ im Browser-Menü wird AdsimoBuy wie eine App installiert und funktioniert auch offline.
