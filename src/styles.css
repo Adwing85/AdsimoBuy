@@ -431,8 +431,15 @@ label.field {
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 10px;
+}
+
+.grid-2 > .btn {
+  min-width: 0;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
 }
 
 .chips {

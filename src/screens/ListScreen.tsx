@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Barcode, Camera, Check, ChevronDown, ListPlus, MoreVertical, Plus, ReceiptText, Sparkles, Trash2 } from 'lucide-react';
+import { Barcode, Camera, Check, ChefHat, ChevronDown, ListPlus, MoreVertical, Plus, ReceiptText, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { CategorySelect, Empty, ProductThumb, Progress, Sheet } from '../components/common';
 import { db } from '../db/db';
@@ -251,10 +251,13 @@ export function ListScreen() {
 
         {items.length === 0 && (
           <Empty icon="🛒" title="Deine Liste ist leer">
-            <p className="small">Tippe oben einen Artikel ein, fotografiere einen Einkaufszettel oder scanne einen Barcode.</p>
+            <p className="small">Tippe oben einen Artikel ein, fotografiere einen Einkaufszettel oder ein Gericht, oder scanne einen Barcode.</p>
             <div className="row wrap" style={{ justifyContent: 'center', marginTop: 12 }}>
               <button className="btn soft" onClick={ui.openPhotoImport}>
                 <Camera size={18} /> Zettel fotografieren
+              </button>
+              <button className="btn soft" onClick={ui.openDishImport}>
+                <ChefHat size={18} /> Gericht
               </button>
               <button className="btn soft" onClick={() => ui.openScanner('list')}>
                 <Barcode size={18} /> Barcode

@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import * as z from 'zod/v4';
 import { CATEGORIES, CATEGORY_IDS, classifyByKeywords, isCategoryId, type CategoryId } from '../domain/categories';
+import { normalizeUnit, type Ingredient } from '../domain/recipes';
 import { blobToBase64, resizeImage } from './image';
 
 const MODEL = 'claude-opus-5-5';
@@ -49,6 +50,30 @@ const ReceiptSchema = z.object({
     }),
   ),
 });
+
+const DishSchema = z.object({
+  recognized: z.boolean().describe('false, wenn auf dem Foto kein Gericht und kein Rezept erkennbar ist'),
+  dish: z.string().describe('Name des Gerichts auf Deutsch, z. B. "Lasagne Bolognese"'),
+  baseServings: z.number().describe('Portionen, für die die Mengen gelten (ganze Zahl)'),
+  notes: z.string().nullable().describe('Kurzer Hinweis, z. B. dass Mengen geschätzt sind; sonst null'),
+  ingredients: z.array(
+    z.object({
+      name: z.string().describe('Einkaufsfreundlicher Zutatenname, z. B. "Hackfleisch gemischt", ohne Mengen oder Zubereitung'),
+      amount: z.number().nullable().describe('Menge für baseServings; null bei "nach Bedarf"'),
+      unit: z.string().nullable().describe('Eine von: g, kg, ml, l, Stk, EL, TL, Prise, Zehe, Dose, Packung, Becher, Bund, Scheibe, Glas; null wenn keine'),
+      category: categoryField,
+      pantry: z.boolean().describe('true für typische Vorräte wie Salz, Pfeffer, Öl, Zucker, Mehl, getrocknete Gewürze, Brühe'),
+    }),
+  ),
+});
+
+export interface AiDishResult {
+  recognized: boolean;
+  dish: string;
+  baseServings: number;
+  notes: string | null;
+  ingredients: Ingredient[];
+}
 
 export interface AiListResult {
   items: Array<{ name: string; quantity: string | null; category: CategoryId }>;
@@ -181,6 +206,54 @@ ${CATEGORY_HINT}`,
         category: toCategory(i.category, i.name),
       };
     }),
+  };
+}
+
+/**
+ * Erkennt ein Gericht auf einem Foto (Teller, Rezeptseite, Screenshot) oder anhand seines Namens
+ * und liefert die Zutaten mit Mengen für eine bestimmte Portionszahl.
+ */
+export async function extractDishWithAi(
+  apiKey: string,
+  input: { image?: Blob; text?: string },
+  servings: number,
+): Promise<AiDishResult> {
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  if (input.image) content.push(await imageBlock(input.image));
+  const request = input.text?.trim()
+    ? `Gericht: ${input.text.trim()}`
+    : 'Welches Gericht ist das? Erstelle die Zutatenliste zum Nachkochen.';
+  content.push({ type: 'text', text: `${request}\nBitte Mengen für ${servings} Portionen angeben.` });
+
+  const result = await run(
+    apiKey,
+    DishSchema,
+    `Du hilfst beim Einkaufen fürs Kochen. Du bekommst ein Foto eines Gerichts, einer Rezeptseite oder eines Rezept-Screenshots
+oder nur den Namen eines Gerichts. Bestimme das Gericht und erstelle die Zutatenliste für ein typisches deutsches Hausrezept.
+Regeln:
+- Steht ein Rezept mit Mengen im Bild, übernimm diese Mengen und dessen Portionszahl als baseServings.
+- Sonst schätze übliche Mengen für die gewünschte Portionszahl und setze baseServings auf diese Zahl.
+- Eine Zeile pro Zutat, so benannt, wie man sie im Supermarkt kauft; Zubereitungshinweise weglassen.
+- Mengen in metrischen Einheiten oder als Stück/EL/TL; keine Bereiche, sondern einen Wert.
+- pantry nur für Dinge, die man meist zu Hause hat.
+Kategorien:
+${CATEGORY_HINT}`,
+    content,
+  );
+  return {
+    recognized: result.recognized,
+    dish: result.dish.trim(),
+    baseServings: result.baseServings > 0 ? Math.round(result.baseServings) : servings,
+    notes: result.notes?.trim() || null,
+    ingredients: result.ingredients
+      .filter((i) => i.name.trim())
+      .map((i) => ({
+        name: i.name.trim(),
+        amount: i.amount !== null && i.amount > 0 ? i.amount : null,
+        unit: normalizeUnit(i.unit),
+        category: toCategory(i.category, i.name),
+        pantry: i.pantry,
+      })),
   };
 }
 

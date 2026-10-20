@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Barcode, Camera, ReceiptText } from 'lucide-react';
+import { Barcode, Camera, ChefHat, ReceiptText } from 'lucide-react';
 import { BarcodeScanner, type ScannerMode } from './components/BarcodeScanner';
 import { Sheet } from './components/common';
+import { DishImport } from './components/DishImport';
 import { PhotoImport } from './components/PhotoImport';
 import { useSettings } from './hooks/data';
 import { navigate } from './hooks/useRoute';
@@ -16,6 +17,7 @@ interface Ui {
   openScanMenu(): void;
   openScanner(mode: ScannerMode): void;
   openPhotoImport(): void;
+  openDishImport(): void;
 }
 
 const UiContext = createContext<Ui | null>(null);
@@ -26,7 +28,7 @@ export function useUi(): Ui {
   return ui;
 }
 
-type Overlay = { kind: 'none' } | { kind: 'menu' } | { kind: 'scanner'; mode: ScannerMode } | { kind: 'photo' };
+type Overlay = { kind: 'none' } | { kind: 'menu' } | { kind: 'scanner'; mode: ScannerMode } | { kind: 'photo' } | { kind: 'dish' };
 
 export function UiProvider({ children }: { children: ReactNode }) {
   const settings = useSettings();
@@ -48,6 +50,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
       openScanMenu: () => setOverlay({ kind: 'menu' }),
       openScanner: (mode) => setOverlay({ kind: 'scanner', mode }),
       openPhotoImport: () => setOverlay({ kind: 'photo' }),
+      openDishImport: () => setOverlay({ kind: 'dish' }),
     }),
     [showToast],
   );
@@ -69,6 +72,15 @@ export function UiProvider({ children }: { children: ReactNode }) {
               <div>
                 <strong>Einkaufszettel fotografieren</strong>
                 <span>Zettel, Notiz oder Screenshot → Liste</span>
+              </div>
+            </button>
+            <button className="action" onClick={() => setOverlay({ kind: 'dish' })} disabled={!listId}>
+              <span className="action-icon">
+                <ChefHat size={22} />
+              </span>
+              <div>
+                <strong>Gericht → Einkauf</strong>
+                <span>Gericht oder Rezept fotografieren, Zutaten für deine Portionen</span>
               </div>
             </button>
             <button className="action" onClick={() => setOverlay({ kind: 'scanner', mode: 'list' })}>
@@ -109,10 +121,25 @@ export function UiProvider({ children }: { children: ReactNode }) {
           apiKey={settings.apiKey}
           ocrMode={settings.ocrMode}
           onClose={close}
+          onDish={() => setOverlay({ kind: 'dish' })}
           onDone={(added) => {
             close();
             navigate('/list');
             showToast(added ? `${added} Artikel hinzugefügt` : 'Alles stand schon auf der Liste');
+          }}
+        />
+      )}
+
+      {overlay.kind === 'dish' && listId && (
+        <DishImport
+          listId={listId}
+          apiKey={settings.apiKey}
+          defaultServings={settings.servings ?? 4}
+          onClose={close}
+          onDone={(message) => {
+            close();
+            navigate('/list');
+            showToast(message);
           }}
         />
       )}

@@ -10,6 +10,7 @@ und die Liste wird nach dem Laufweg deines Marktes sortiert.
 | --- | --- |
 | **Liste** | Artikel eintippen (`2x Milch`, `500 g Hackfleisch`, `Eier 10`), mit Autovervollständigung aus deiner Produkt-DB. Mehrere Listen, Notizen, Mengen, Rückgängig. |
 | **Foto → Liste** | Einkaufszettel, Notiz oder Screenshot fotografieren. Die Artikel werden erkannt, automatisch einsortiert und vor dem Übernehmen zur Prüfung angezeigt. Alternativ Text einfügen (z. B. aus WhatsApp). |
+| **Gericht → Einkauf** | Ein Gericht, eine Rezeptseite oder einen Rezept-Screenshot fotografieren (oder nur den Namen eintippen). Die KI liefert die Zutaten mit Mengen. Über den Portionsregler werden die Mengen einkaufsfreundlich umgerechnet (z. B. 1,5 Zwiebeln → 2 Stück, 375 g → 380 g). Vorräte wie Salz und Öl sind vorab abgewählt. Erkannte Gerichte werden gespeichert und lassen sich ohne neuen KI-Aufruf wieder verwenden. |
 | **Barcode-Scanner** | Live-Kamera mit nativem `BarcodeDetector` (Android/Chrome) bzw. ZXing (iOS/Safari). Produktdaten, Nährwerte, Nutri-Score, NOVA, Zutaten und Allergene kommen von [Open Food Facts](https://world.openfoodfacts.org). Fallbacks: Code eintippen oder aus einem Foto lesen. |
 | **Produkt-Datenbank** | Jedes abgehakte, gescannte oder auf einem Bon gekaufte Produkt wird gespeichert, mit allen Nährstoffen je 100 g (inkl. Vitamine und Mineralstoffe), Kaufhistorie, Bon-Bezeichnungen und Preisverlauf. Nährwerte lassen sich auch nachträglich per Open-Food-Facts-Suche zuordnen. |
 | **Marktauswahl & Laufweg** | Vorlagen für Lidl, Aldi Süd/Nord, REWE, EDEKA, Kaufland, Penny, Netto, dm und Rossmann. Bei Lidl kommen z. B. zuerst Obst & Gemüse und Convenience, dann Backstation, Kühlregal … Die Reihenfolge ist pro Filiale anpassbar (ziehen oder Pfeile). |
@@ -26,6 +27,7 @@ und die Liste wird nach dem Laufweg deines Marktes sortiert.
   Sprachdaten geladen und danach gecacht.
 - **KI (optional):** Wenn du unter *Mehr → Texterkennung* einen Anthropic-API-Schlüssel hinterlegst, liest Claude
   (`claude-opus-5-5`) auch Handschrift. Bon-Positionen werden dabei gleich deinen bekannten Produkten zugeordnet.
+  Die Funktion „Gericht → Einkauf“ gibt es nur mit KI; bereits gespeicherte Gerichte funktionieren auch ohne Schlüssel.
   Das Foto (bei Bons zusätzlich die Liste deiner Produktnamen) geht dann direkt an die Anthropic-API. Die Kosten laufen
   über dein Anthropic-Konto. Der Schlüssel bleibt auf dem Gerät und ist nicht Teil der Sicherung.
 
