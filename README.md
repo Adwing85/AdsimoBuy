@@ -8,7 +8,7 @@ und die Liste wird nach dem Laufweg deines Marktes sortiert.
 
 | Bereich | Was die App macht |
 | --- | --- |
-| **Liste** | Artikel eintippen (`2x Milch`, `500 g Hackfleisch`, `Eier 10`), mit Autovervollständigung aus deiner Produkt-DB. Mehrere Listen, Notizen, Mengen, Rückgängig. |
+| **Liste** | Artikel eintippen (`2x Milch`, `500 g Hackfleisch`, `Eier 10`), mit Autovervollständigung aus deiner Produkt-DB. Mehrere Listen, Notizen, Mengen. Schnell entfernen: Eintrag nach links wischen, im Auswahlmodus mehrere Einträge auf einmal oder alle über das Listenmenü – jeweils mit Rückgängig. |
 | **Foto → Liste** | Einkaufszettel, Notiz oder Screenshot fotografieren. Die Artikel werden erkannt, automatisch einsortiert und vor dem Übernehmen zur Prüfung angezeigt. Alternativ Text einfügen (z. B. aus WhatsApp). |
 | **Gericht → Einkauf** | Ein Gericht, eine Rezeptseite oder einen Rezept-Screenshot fotografieren (oder nur den Namen eintippen). Die KI liefert die Zutaten mit Mengen. Über den Portionsregler werden die Mengen einkaufsfreundlich umgerechnet (z. B. 1,5 Zwiebeln → 2 Stück, 375 g → 380 g). Vorräte wie Salz und Öl sind vorab abgewählt. Erkannte Gerichte werden gespeichert und lassen sich ohne neuen KI-Aufruf wieder verwenden. |
 | **Barcode-Scanner** | Live-Kamera mit nativem `BarcodeDetector` (Android/Chrome) bzw. ZXing (iOS/Safari). Produktdaten, Nährwerte, Nutri-Score, NOVA, Zutaten und Allergene kommen von [Open Food Facts](https://world.openfoodfacts.org). Fallbacks: Code eintippen oder aus einem Foto lesen. |

@@ -14,7 +14,9 @@ import {
   importBackup,
   reassignReceiptItem,
   markRecipeUsed,
+  removeItems,
   resetAll,
+  restoreItems,
   saveReceipt,
   saveRecipe,
   setItemChecked,
@@ -182,6 +184,19 @@ describe('repo', () => {
     expect(await db.checkEvents.count()).toBe(1);
     // Ein bereits angelegtes Produkt "Milch" wurde nicht zusätzlich erzeugt
     expect(await db.products.count()).toBe(1);
+  });
+
+  it('entfernt mehrere Einträge und stellt sie per Rückgängig wieder her', async () => {
+    const list = await activeList();
+    await addItems(list.id!, ['Brot', 'Butter', 'Käse'].map((name) => ({ name, source: 'manual' as const })));
+    const items = await db.items.where('listId').equals(list.id!).toArray();
+    const removed = await removeItems(items.slice(0, 2).map((i) => i.id!));
+    expect(removed.map((i) => i.name)).toEqual(['Brot', 'Butter']);
+    expect((await db.items.toArray()).map((i) => i.name)).toEqual(['Käse']);
+    await restoreItems(removed);
+    expect((await db.items.toArray()).map((i) => i.name).sort()).toEqual(['Brot', 'Butter', 'Käse']);
+    // Wiederhergestellte Einträge behalten ihre ID (wichtig für Verknüpfungen).
+    expect((await db.items.get(items[0].id!))?.name).toBe('Brot');
   });
 
   it('Sicherung lässt sich exportieren und wieder einspielen', async () => {

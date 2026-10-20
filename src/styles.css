@@ -637,17 +637,81 @@ label.field {
   color: var(--muted);
 }
 
+/* Zeile mit Wisch-Geste: Hinter dem Eintrag liegt die rote "Entfernen"-Fläche. */
+.swipe {
+  position: relative;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
+}
+
+.swipe:first-child {
+  border-top: none;
+}
+
+.swipe-action {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-right: 18px;
+  background: color-mix(in srgb, var(--danger) 75%, var(--surface));
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.86rem;
+  transition: background 0.15s ease;
+}
+
+.swipe-action.armed {
+  background: var(--danger);
+}
+
 .item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 10px 8px 10px 14px;
   min-height: 56px;
-  border-top: 1px solid var(--border);
+  background: var(--surface);
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.item:first-of-type {
-  border-top: none;
+.item.selected {
+  background: var(--accent-soft);
+}
+
+.check.select {
+  border: none;
+  width: 32px;
+  height: 32px;
+  color: var(--muted);
+}
+
+.item.selected .check.select {
+  color: var(--accent);
+}
+
+.select-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-h) + var(--safe-bottom));
+  z-index: 35;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+
+.select-bar-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  gap: 10px;
 }
 
 .check {
@@ -1127,8 +1191,14 @@ table.nutrients tr.sub td:first-child {
   display: flex;
   gap: 12px;
   align-items: center;
+  width: max-content;
   max-width: calc(100vw - 32px);
   animation: toast-in 0.2s ease;
+}
+
+/* Im Auswahlmodus liegt die Aktionsleiste über der Navigation – Hinweise darüber anzeigen. */
+body:has(.select-bar) .toast {
+  bottom: calc(var(--nav-h) + var(--safe-bottom) + 84px);
 }
 
 .toast button {
