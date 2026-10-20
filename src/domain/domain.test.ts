@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { classifyByKeywords, classifyByOffTags } from './categories';
 import { learnOrder } from './learnOrder';
-import { findBestMatch, nameSimilarity } from './matching';
+import { findBestMatch, ITEM_MATCH_THRESHOLD, nameSimilarity, rankItemsForProduct } from './matching';
 import { parseListLine, parseListText, quantityMultiplier } from './parseListText';
 import { parseReceiptText, sumItems } from './parseReceiptText';
-import { estimateTotal, priceStats } from './prices';
+import { estimateTotal, latestPrices, priceStats } from './prices';
 import { completeOrder, defaultOrderFor, detectChain, groupByStoreOrder } from './stores';
 import { repurchaseSuggestions } from './suggestions';
 import { normalize, prettifyName } from './text';
@@ -265,5 +265,44 @@ describe('learnOrder', () => {
     expect(pos('obst_gemuese')).toBeLessThan(pos('molkerei'));
     expect(learned.order).toHaveLength(base.length);
     expect(learnOrder(trip('x', ['getraenke', 'molkerei']), base)).toBeNull();
+  });
+});
+
+describe('rankItemsForProduct', () => {
+  const items = [
+    { id: 1, name: 'Milch', category: 'molkerei' },
+    { id: 2, name: 'Bananen', category: 'obst_gemuese' },
+    { id: 3, name: 'Joghurt', category: 'molkerei' },
+    { id: 4, name: 'Gouda', category: 'kaese', productId: 9 },
+  ];
+  it('erkennt Listeneinträge im Produktnamen', () => {
+    const [best] = rankItemsForProduct({ id: 5, name: 'Vollmilch 3,5 %', brand: 'Milbona', category: 'molkerei' }, items);
+    expect(best.id).toBe(1);
+    expect(best.score).toBeGreaterThanOrEqual(ITEM_MATCH_THRESHOLD);
+  });
+  it('bevorzugt bereits verknüpfte Produkte', () => {
+    expect(rankItemsForProduct({ id: 9, name: 'Jung Holländer', category: 'kaese' }, items)[0]).toEqual({ id: 4, score: 1 });
+  });
+  it('nutzt die Kategorie, wenn sie eindeutig ist', () => {
+    const [best] = rankItemsForProduct({ id: 7, name: 'Chiquita', category: 'obst_gemuese' }, items);
+    expect(best.id).toBe(2);
+  });
+  it('wählt bei Unklarheit nichts sicher aus', () => {
+    const [best] = rankItemsForProduct({ id: 8, name: 'Spülmittel Zitrone', category: 'haushalt' }, items);
+    expect(best.score).toBeLessThan(ITEM_MATCH_THRESHOLD);
+  });
+});
+
+describe('latestPrices', () => {
+  it('liefert letzten Preis gesamt und je Markt', () => {
+    const m = latestPrices([
+      { productId: 1, storeId: 10, date: 1, unitPrice: 0.99 },
+      { productId: 1, storeId: 20, date: 3, unitPrice: 1.19 },
+      { productId: 1, storeId: 10, date: 2, unitPrice: 1.09 },
+      { productId: 2, date: 1, unitPrice: 0 },
+    ]);
+    expect(m.get(1)?.latest).toEqual({ price: 1.19, date: 3 });
+    expect(m.get(1)?.byStore.get(10)).toEqual({ price: 1.09, date: 2 });
+    expect(m.has(2)).toBe(false);
   });
 });

@@ -6,7 +6,9 @@ import { db } from './db';
 import {
   addItems,
   classify,
+  confirmItemWithProduct,
   ensureSeed,
+  productPricePoints,
   exportBackup,
   getSetting,
   importBackup,
@@ -159,6 +161,27 @@ describe('repo', () => {
     await addItems(list.id!, [{ name: 'Hackfleisch', quantity: '750 g', note: 'für Lasagne', category: 'fleisch_wurst', source: 'recipe' }]);
     const item = await db.items.where('listId').equals(list.id!).first();
     expect(item).toMatchObject({ name: 'Hackfleisch', quantity: '750 g', note: 'für Lasagne', source: 'recipe' });
+  });
+
+  it('Abhaken per Scan verknüpft das Produkt und merkt den Regalpreis im Markt', async () => {
+    const list = await activeList();
+    await addItems(list.id!, [{ name: 'Milch', source: 'manual' }]);
+    const item = (await db.items.where('listId').equals(list.id!).first())!;
+    const productId = await upsertFromOff({ barcode: '4000000000017', name: 'Vollmilch 3,5 %', category: 'molkerei' });
+
+    await confirmItemWithProduct(item, productId, list.storeId, 1.09);
+
+    const after = (await db.items.get(item.id!))!;
+    expect(after.checked).toBe(1);
+    expect(after.productId).toBe(productId);
+    const product = (await db.products.get(productId))!;
+    expect(product.lastUnitPrice).toBe(1.09);
+    expect(product.purchaseDays).toHaveLength(1);
+    const points = await productPricePoints(productId);
+    expect(points).toEqual([expect.objectContaining({ unitPrice: 1.09, storeId: list.storeId, source: 'shelf' })]);
+    expect(await db.checkEvents.count()).toBe(1);
+    // Ein bereits angelegtes Produkt "Milch" wurde nicht zusätzlich erzeugt
+    expect(await db.products.count()).toBe(1);
   });
 
   it('Sicherung lässt sich exportieren und wieder einspielen', async () => {

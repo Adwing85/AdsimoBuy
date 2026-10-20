@@ -40,6 +40,7 @@ export function ProductDetail({ id }: { id: number }) {
   const stores = useStores();
   const product = useLiveQuery(() => db.products.get(id), [id]);
   const purchases = useLiveQuery(() => db.receiptItems.where('productId').equals(id).toArray(), [id]) ?? [];
+  const shelfPrices = useLiveQuery(() => db.prices.where('productId').equals(id).toArray(), [id]) ?? [];
   const [offSearch, setOffSearch] = useState(false);
 
   if (product === undefined) return null;
@@ -53,7 +54,29 @@ export function ProductDetail({ id }: { id: number }) {
     );
   }
 
-  const priced = purchases.filter((p) => p.kind === 'item' && p.unitPrice > 0).sort((a, b) => a.date - b.date);
+  // Preise aus Kassenbons und beim Scannen erfasste Regalpreise.
+  const priced = [
+    ...purchases
+      .filter((p) => p.kind === 'item' && p.unitPrice > 0)
+      .map((p) => ({
+        key: `r${p.id}`,
+        date: p.date,
+        unitPrice: p.unitPrice,
+        storeId: p.storeId,
+        unit: p.unit,
+        detail: `${p.rawName} · ${p.unit === 'kg' ? `${formatNumber(p.quantity)} kg` : `${p.quantity}×`}`,
+        receiptId: p.receiptId as number | undefined,
+      })),
+    ...shelfPrices.map((p) => ({
+      key: `s${p.id}`,
+      date: p.date,
+      unitPrice: p.unitPrice,
+      storeId: p.storeId,
+      unit: 'stk' as const,
+      detail: 'Regalpreis (beim Scannen erfasst)',
+      receiptId: undefined as number | undefined,
+    })),
+  ].sort((a, b) => a.date - b.date);
   const storeName = (storeId?: number) => stores.find((s) => s.id === storeId)?.name ?? 'Unbekannter Markt';
   const stats = priceStats(priced.map((p) => ({ date: p.date, unitPrice: p.unitPrice, storeId: p.storeId, storeName: storeName(p.storeId) })));
   const unit = priced.some((p) => p.unit === 'kg') ? 'pro kg' : 'pro Stück';
@@ -188,20 +211,16 @@ export function ProductDetail({ id }: { id: number }) {
                 />
               )}
               <details>
-                <summary className="small text-2">Alle Käufe ({priced.length})</summary>
+                <summary className="small text-2">Alle Preise ({priced.length})</summary>
                 <table className="nutrients">
                   <tbody>
                     {[...priced].reverse().map((p) => (
-                      <tr key={p.id}>
+                      <tr key={p.key}>
                         <td>
                           {formatDate(p.date)} · {storeName(p.storeId)}
-                          <div className="tiny muted">
-                            {p.rawName} · {p.unit === 'kg' ? `${formatNumber(p.quantity)} kg` : `${p.quantity}×`}
-                          </div>
+                          <div className="tiny muted">{p.detail}</div>
                         </td>
-                        <td>
-                          <a href={`#/receipts/${p.receiptId}`}>{formatEuro(p.unitPrice)}</a>
-                        </td>
+                        <td>{p.receiptId ? <a href={`#/receipts/${p.receiptId}`}>{formatEuro(p.unitPrice)}</a> : formatEuro(p.unitPrice)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -210,7 +229,7 @@ export function ProductDetail({ id }: { id: number }) {
             </>
           ) : (
             <div className="small muted">
-              Noch keine Preise. Erfasse einen Kassenbon – die Position wird diesem Produkt zugeordnet und der Preisverlauf entsteht automatisch.
+              Noch keine Preise. Erfasse einen Kassenbon oder scanne das Produkt beim Einkaufen und bestätige den Regalpreis – daraus entsteht der Preisverlauf je Markt.
             </div>
           )}
         </div>

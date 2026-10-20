@@ -82,3 +82,42 @@ export function findBestMatch(name: string, candidates: readonly MatchCandidate[
   }
   return best;
 }
+
+export interface ListItemCandidate {
+  id: number;
+  name: string;
+  category: string;
+  productId?: number;
+}
+
+export interface ItemMatch {
+  id: number;
+  score: number;
+}
+
+/** Ab diesem Wert wird ein Listeneintrag beim Scannen automatisch vorausgewählt. */
+export const ITEM_MATCH_THRESHOLD = 0.6;
+
+/**
+ * Ordnet ein gescanntes Produkt den offenen Listeneinträgen zu: bereits verknüpftes Produkt,
+ * dann Namensähnlichkeit ("Milch" ↔ "Vollmilch 3,5 %"), dann gleiche Kategorie als schwaches Signal.
+ */
+export function rankItemsForProduct(
+  product: { id?: number; name: string; brand?: string; category: string },
+  items: readonly ListItemCandidate[],
+): ItemMatch[] {
+  const productText = normalize(`${product.brand ?? ''} ${product.name}`);
+  const sameCategory = items.filter((i) => i.category === product.category);
+  return items
+    .map((item) => {
+      if (product.id !== undefined && item.productId === product.id) return { id: item.id, score: 1 };
+      const itemKey = normalize(item.name);
+      const itemTokens = itemKey.split(' ').filter((t) => t.length >= 3);
+      // Alle Wörter des Listeneintrags stecken im Produktnamen ("Milch" in "Vollmilch").
+      const contained = itemTokens.length > 0 && itemTokens.every((t) => productText.includes(t)) ? 0.85 : 0;
+      let score = Math.max(contained, nameSimilarity(item.name, product.name), product.brand ? nameSimilarity(item.name, `${product.brand} ${product.name}`) : 0);
+      if (item.category === product.category) score += sameCategory.length === 1 ? 0.35 : 0.1;
+      return { id: item.id, score: Math.min(0.99, score) };
+    })
+    .sort((a, b) => b.score - a.score);
+}

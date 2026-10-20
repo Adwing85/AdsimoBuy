@@ -1,5 +1,5 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { Barcode, Camera, Check, ChefHat, ChevronDown, ListPlus, MoreVertical, Plus, ReceiptText, Sparkles, Trash2 } from 'lucide-react';
+import { Barcode, Camera, Check, ChefHat, ChevronDown, ListPlus, MoreVertical, Plus, ReceiptText, ScanBarcode, Sparkles, Trash2 } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { CategorySelect, Empty, ProductThumb, Progress, Sheet } from '../components/common';
 import { db } from '../db/db';
@@ -15,7 +15,7 @@ import {
 import type { ListItem, Product } from '../db/types';
 import { CATEGORIES } from '../domain/categories';
 import { parseListLine, quantityMultiplier } from '../domain/parseListText';
-import { estimateTotal } from '../domain/prices';
+import { estimateTotal, latestPrices } from '../domain/prices';
 import { CHAINS, groupByStoreOrder } from '../domain/stores';
 import { repurchaseSuggestions } from '../domain/suggestions';
 import { normalize } from '../domain/text';
@@ -35,6 +35,22 @@ export function ListScreen() {
   const products = useLiveQuery(() => db.products.toArray()) ?? [];
   const productById = useMemo(() => new Map(products.map((p) => [p.id!, p])), [products]);
   const store = stores.find((s) => s.id === list?.storeId);
+  // Letzte Preise je Produkt und Markt (Bons + Regalpreise beim Scannen).
+  const prices = useLiveQuery(async () => {
+    const [receiptItems, shelf] = await Promise.all([db.receiptItems.toArray(), db.prices.toArray()]);
+    return latestPrices([
+      ...receiptItems
+        .filter((r) => r.kind === 'item' && r.productId !== undefined)
+        .map((r) => ({ productId: r.productId!, storeId: r.storeId, date: r.date, unitPrice: r.unitPrice })),
+      ...shelf.map((p) => ({ productId: p.productId, storeId: p.storeId, date: p.date, unitPrice: p.unitPrice })),
+    ]);
+  });
+  const priceFor = (productId?: number): ItemPrice | undefined => {
+    const entry = productId !== undefined ? prices?.get(productId) : undefined;
+    if (!entry) return undefined;
+    const atStore = store?.id !== undefined ? entry.byStore.get(store.id) : undefined;
+    return atStore ? { price: atStore.price, storeName: store?.name } : { price: entry.latest.price };
+  };
 
   const [text, setText] = useState('');
   const [focused, setFocused] = useState(false);
@@ -49,7 +65,7 @@ export function ListScreen() {
 
   const estimate = estimateTotal(
     open.map((i) => ({
-      unitPrice: i.productId ? productById.get(i.productId)?.lastUnitPrice : undefined,
+      unitPrice: priceFor(i.productId)?.price,
       multiplier: quantityMultiplier(i.quantity),
     })),
   );
@@ -236,6 +252,11 @@ export function ListScreen() {
                 )}
               </div>
               <Progress value={progress} />
+              {open.length > 0 && (
+                <button className="btn soft small" style={{ alignSelf: 'flex-start', marginTop: 4 }} onClick={() => ui.openScanner('check')}>
+                  <ScanBarcode size={16} /> Im Laden: scannen & abhaken
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -275,7 +296,14 @@ export function ListScreen() {
               <span className="muted">{g.items.length}</span>
             </div>
             {g.items.map((item) => (
-              <ItemRow key={item.id} item={item} product={item.productId ? productById.get(item.productId) : undefined} onToggle={toggle} onEdit={setEditing} />
+              <ItemRow
+                key={item.id}
+                item={item}
+                product={item.productId ? productById.get(item.productId) : undefined}
+                price={priceFor(item.productId)}
+                onToggle={toggle}
+                onEdit={setEditing}
+              />
             ))}
           </section>
         ))}
@@ -290,7 +318,14 @@ export function ListScreen() {
             </div>
             <section className="card group">
               {done.map((item) => (
-                <ItemRow key={item.id} item={item} product={item.productId ? productById.get(item.productId) : undefined} onToggle={toggle} onEdit={setEditing} />
+                <ItemRow
+                key={item.id}
+                item={item}
+                product={item.productId ? productById.get(item.productId) : undefined}
+                price={priceFor(item.productId)}
+                onToggle={toggle}
+                onEdit={setEditing}
+              />
               ))}
             </section>
             {open.length === 0 && (
@@ -316,6 +351,11 @@ export function ListScreen() {
           product={editing.productId ? productById.get(editing.productId) : undefined}
           onClose={() => setEditing(null)}
           onDelete={() => remove(editing)}
+          onScan={() => {
+            const target = editing;
+            setEditing(null);
+            if (target.id) ui.openScanner('check', target.id);
+          }}
         />
       )}
 
@@ -331,18 +371,25 @@ export function ListScreen() {
   );
 }
 
+interface ItemPrice {
+  price: number;
+  /** Gesetzt, wenn der Preis aus dem gewählten Markt stammt. */
+  storeName?: string;
+}
+
 function ItemRow({
   item,
   product,
+  price,
   onToggle,
   onEdit,
 }: {
   item: ListItem;
   product?: Product;
+  price?: ItemPrice;
   onToggle: (i: ListItem) => void;
   onEdit: (i: ListItem) => void;
 }) {
-  const price = product?.lastUnitPrice;
   return (
     <div className={`item${item.checked ? ' done' : ''}`}>
       <button
@@ -361,7 +408,11 @@ function ItemRow({
         {(item.note || product?.brand || price) && (
           <div className="item-meta">
             {product?.brand && <span>{product.brand}</span>}
-            {price ? <span className="num">zuletzt {formatEuro(price)}</span> : null}
+            {price ? (
+              <span className="num">
+                {price.storeName ? `bei ${price.storeName}` : 'zuletzt'} {formatEuro(price.price)}
+              </span>
+            ) : null}
             {item.note && <span>{item.note}</span>}
           </div>
         )}
@@ -376,11 +427,13 @@ function ItemEditor({
   product,
   onClose,
   onDelete,
+  onScan,
 }: {
   item: ListItem;
   product?: Product;
   onClose: () => void;
   onDelete: () => void;
+  onScan: () => void;
 }) {
   const [name, setName] = useState(item.name);
   const [quantity, setQuantity] = useState(item.quantity ?? '');
@@ -414,6 +467,11 @@ function ItemEditor({
           Kategorie (bestimmt den Platz im Laufweg)
           <CategorySelect value={category} onChange={setCategory} />
         </label>
+        {!item.checked && (
+          <button type="button" className="btn soft" onClick={onScan}>
+            <ScanBarcode size={18} /> Artikel scannen & abhaken
+          </button>
+        )}
         {product && (
           <button
             type="button"

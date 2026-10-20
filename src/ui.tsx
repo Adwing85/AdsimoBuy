@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Barcode, Camera, ChefHat, ReceiptText } from 'lucide-react';
+import { Barcode, Camera, ChefHat, ReceiptText, ScanBarcode } from 'lucide-react';
 import { BarcodeScanner, type ScannerMode } from './components/BarcodeScanner';
 import { Sheet } from './components/common';
 import { DishImport } from './components/DishImport';
@@ -15,7 +15,7 @@ interface ToastAction {
 interface Ui {
   toast(message: string, action?: ToastAction): void;
   openScanMenu(): void;
-  openScanner(mode: ScannerMode): void;
+  openScanner(mode: ScannerMode, targetItemId?: number): void;
   openPhotoImport(): void;
   openDishImport(): void;
 }
@@ -28,7 +28,12 @@ export function useUi(): Ui {
   return ui;
 }
 
-type Overlay = { kind: 'none' } | { kind: 'menu' } | { kind: 'scanner'; mode: ScannerMode } | { kind: 'photo' } | { kind: 'dish' };
+type Overlay =
+  | { kind: 'none' }
+  | { kind: 'menu' }
+  | { kind: 'scanner'; mode: ScannerMode; targetItemId?: number }
+  | { kind: 'photo' }
+  | { kind: 'dish' };
 
 export function UiProvider({ children }: { children: ReactNode }) {
   const settings = useSettings();
@@ -48,7 +53,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
     () => ({
       toast: showToast,
       openScanMenu: () => setOverlay({ kind: 'menu' }),
-      openScanner: (mode) => setOverlay({ kind: 'scanner', mode }),
+      openScanner: (mode, targetItemId) => setOverlay({ kind: 'scanner', mode, targetItemId }),
       openPhotoImport: () => setOverlay({ kind: 'photo' }),
       openDishImport: () => setOverlay({ kind: 'dish' }),
     }),
@@ -83,6 +88,15 @@ export function UiProvider({ children }: { children: ReactNode }) {
                 <span>Gericht oder Rezept fotografieren, Zutaten für deine Portionen</span>
               </div>
             </button>
+            <button className="action" onClick={() => setOverlay({ kind: 'scanner', mode: 'check' })} disabled={!listId}>
+              <span className="action-icon">
+                <ScanBarcode size={22} />
+              </span>
+              <div>
+                <strong>Im Laden: scannen & abhaken</strong>
+                <span>Artikel in den Wagen legen, Barcode scannen, Preis bestätigen</span>
+              </div>
+            </button>
             <button className="action" onClick={() => setOverlay({ kind: 'scanner', mode: 'list' })}>
               <span className="action-icon">
                 <Barcode size={22} />
@@ -112,7 +126,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
       )}
 
       {overlay.kind === 'scanner' && (
-        <BarcodeScanner mode={overlay.mode} listId={listId} onClose={close} onToast={showToast} />
+        <BarcodeScanner mode={overlay.mode} listId={listId} targetItemId={overlay.targetItemId} onClose={close} onToast={showToast} />
       )}
 
       {overlay.kind === 'photo' && listId && (

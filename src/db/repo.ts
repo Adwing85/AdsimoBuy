@@ -3,7 +3,7 @@ import { defaultOrderFor, type ChainId, CHAINS } from '../domain/stores';
 import { dayKey, normalize, prettifyName, round2 } from '../domain/text';
 import type { OffProduct } from '../services/openFoodFacts';
 import { db, type AppDB } from './db';
-import type { ItemSource, ListItem, Product, Receipt, ReceiptItem, Recipe, Store } from './types';
+import type { ItemSource, ListItem, PriceObservation, Product, Receipt, ReceiptItem, Recipe, Store } from './types';
 
 // ---------- Einstellungen ----------
 
@@ -150,10 +150,26 @@ export async function upsertFromOff(off: OffProduct): Promise<number> {
   );
 }
 
+/**
+ * Produkt zu einem Barcode, den Open Food Facts nicht kennt: hängt den Barcode an ein gleichnamiges
+ * Produkt ohne Barcode oder legt ein neues Produkt mit dem Namen des Listeneintrags an.
+ */
+export async function productForUnknownBarcode(barcode: string, name: string, category: CategoryId): Promise<number> {
+  const byBarcode = await db.products.where('barcode').equals(barcode).first();
+  if (byBarcode?.id) return byBarcode.id;
+  const byName = await findProductByName(name);
+  if (byName?.id && !byName.barcode) {
+    await db.products.update(byName.id, { barcode, updatedAt: Date.now() });
+    return byName.id;
+  }
+  return db.products.add(newProduct({ name, barcode, category, source: 'list' }));
+}
+
 export async function deleteProduct(id: number): Promise<void> {
-  await db.transaction('rw', db.products, db.items, db.receiptItems, async () => {
+  await db.transaction('rw', [db.products, db.items, db.receiptItems, db.prices], async () => {
     await db.items.where('productId').equals(id).modify({ productId: undefined });
     await db.receiptItems.where('productId').equals(id).modify({ productId: undefined });
+    await db.prices.where('productId').equals(id).delete();
     await db.products.delete(id);
   });
 }
@@ -167,10 +183,25 @@ function addPurchaseDay(product: Product, day: string, ts: number): Partial<Prod
   };
 }
 
-/** Aktualisiert den zuletzt bezahlten Stückpreis aus den Bon-Positionen. */
+/** Alle bekannten Stückpreise eines Produkts: Bon-Positionen und Regalpreise. */
+export async function productPricePoints(
+  productId: number,
+): Promise<Array<{ date: number; unitPrice: number; storeId?: number; source: 'receipt' | 'shelf' }>> {
+  const [receiptItems, shelf] = await Promise.all([
+    db.receiptItems.where('productId').equals(productId).toArray(),
+    db.prices.where('productId').equals(productId).toArray(),
+  ]);
+  return [
+    ...receiptItems
+      .filter((e) => e.kind === 'item' && e.unitPrice > 0)
+      .map((e) => ({ date: e.date, unitPrice: e.unitPrice, storeId: e.storeId, source: 'receipt' as const })),
+    ...shelf.map((e) => ({ date: e.date, unitPrice: e.unitPrice, storeId: e.storeId, source: 'shelf' as const })),
+  ];
+}
+
+/** Aktualisiert den zuletzt bekannten Stückpreis aus Bons und Regalpreisen. */
 async function refreshLastPrice(productId: number): Promise<void> {
-  const entries = await db.receiptItems.where('productId').equals(productId).toArray();
-  const latest = entries.filter((e) => e.kind === 'item' && e.unitPrice > 0).sort((a, b) => b.date - a.date)[0];
+  const latest = (await productPricePoints(productId)).sort((a, b) => b.date - a.date)[0];
   await db.products.update(productId, { lastUnitPrice: latest ? latest.unitPrice : undefined });
 }
 
@@ -267,6 +298,31 @@ export async function setItemChecked(item: ListItem, checked: boolean, storeId: 
       await db.items.update(current.id!, { checked: 0, checkedAt: undefined, loggedDay: undefined });
     }
   });
+}
+
+/**
+ * Abhaken per Scan: verknüpft den Listeneintrag mit dem gescannten Produkt, hakt ihn ab
+ * und merkt sich optional den Regalpreis in diesem Markt.
+ */
+export async function confirmItemWithProduct(
+  item: ListItem,
+  productId: number,
+  storeId: number | undefined,
+  shelfPrice?: number,
+): Promise<void> {
+  if (!item.id) return;
+  const current = await db.items.get(item.id);
+  if (!current) return;
+  if (current.checked) await setItemChecked(current, false, storeId);
+  await db.items.update(item.id, { productId });
+  await setItemChecked({ ...current, productId, checked: 0 }, true, storeId);
+  if (shelfPrice !== undefined && shelfPrice > 0) await addShelfPrice(productId, storeId, shelfPrice);
+}
+
+export async function addShelfPrice(productId: number, storeId: number | undefined, unitPrice: number): Promise<void> {
+  const observation: PriceObservation = { productId, storeId, date: Date.now(), unitPrice: round2(unitPrice), source: 'shelf' };
+  await db.prices.add(observation);
+  await refreshLastPrice(productId);
 }
 
 export async function clearChecked(listId: number): Promise<void> {
@@ -460,7 +516,7 @@ interface Backup {
   tables: Record<string, unknown[]>;
 }
 
-const BACKUP_TABLES = ['products', 'lists', 'items', 'stores', 'receipts', 'receiptItems', 'categoryMemory', 'checkEvents', 'settings', 'recipes'] as const;
+const BACKUP_TABLES = ['products', 'lists', 'items', 'stores', 'receipts', 'receiptItems', 'categoryMemory', 'checkEvents', 'settings', 'recipes', 'prices'] as const;
 
 export async function exportBackup(): Promise<Blob> {
   const tables: Backup['tables'] = {};

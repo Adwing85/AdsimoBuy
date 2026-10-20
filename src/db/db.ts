@@ -3,6 +3,7 @@ import type {
   CategoryMemory,
   CheckEvent,
   ListItem,
+  PriceObservation,
   Product,
   Receipt,
   ReceiptItem,
@@ -23,6 +24,7 @@ export class AppDB extends Dexie {
   checkEvents!: Table<CheckEvent, number>;
   settings!: Table<Setting, string>;
   recipes!: Table<Recipe, number>;
+  prices!: Table<PriceObservation, number>;
 
   constructor(name = 'adsimobuy') {
     super(name);
@@ -39,6 +41,9 @@ export class AppDB extends Dexie {
     });
     this.version(2).stores({
       recipes: '++id, updatedAt',
+    });
+    this.version(3).stores({
+      prices: '++id, productId, storeId, date',
     });
   }
 }

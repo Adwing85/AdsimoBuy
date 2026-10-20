@@ -139,3 +139,13 @@ export interface Recipe {
   createdAt: number;
   updatedAt: number;
 }
+
+/** Am Regal abgelesener Preis (beim Abhaken per Scan), ergänzt die Preise aus Kassenbons. */
+export interface PriceObservation {
+  id?: number;
+  productId: number;
+  storeId?: number;
+  date: number;
+  unitPrice: number;
+  source: 'shelf';
+}

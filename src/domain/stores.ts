@@ -112,7 +112,7 @@ export const CHAINS: Record<ChainId, ChainPreset> = {
       'drogerie', 'baby', 'haushalt', 'tier', 'fruehstueck', 'grundnahrung', 'backzutaten', 'kaffee_tee',
       'suesswaren', 'getraenke', 'nonfood', 'sonstiges',
     ],
-    receiptKeywords: ['dm drogerie', 'dm markt', 'dm-drogerie'],
+    receiptKeywords: ['dm drogerie', 'dm markt', 'dm-drogerie', '^dm'],
   },
   rossmann: {
     label: 'Rossmann',
