@@ -11,8 +11,10 @@ import {
   getSetting,
   importBackup,
   reassignReceiptItem,
+  markRecipeUsed,
   resetAll,
   saveReceipt,
+  saveRecipe,
   setItemChecked,
   updateItem,
   upsertFromOff,
@@ -137,6 +139,26 @@ describe('repo', () => {
     const pos = (await db.receiptItems.where('receiptId').equals(receipt2).first())!;
     await reassignReceiptItem(pos, bananen!.id);
     expect((await db.products.get(milchId))!.lastUnitPrice).toBe(0.99);
+  });
+
+  it('speichert Gerichte ohne Duplikate und übernimmt Notizen auf die Liste', async () => {
+    const recipe = {
+      name: 'Lasagne',
+      baseServings: 4,
+      source: 'text' as const,
+      ingredients: [{ name: 'Hackfleisch', amount: 500, unit: 'g', category: 'fleisch_wurst' as const, pantry: false }],
+    };
+    const id = await saveRecipe(recipe);
+    expect(await saveRecipe({ ...recipe, name: 'lasagne', baseServings: 6 })).toBe(id);
+    expect(await db.recipes.count()).toBe(1);
+    expect((await db.recipes.get(id))?.baseServings).toBe(6);
+    await markRecipeUsed(id);
+    expect((await db.recipes.get(id))?.usedCount).toBe(1);
+
+    const list = await activeList();
+    await addItems(list.id!, [{ name: 'Hackfleisch', quantity: '750 g', note: 'für Lasagne', category: 'fleisch_wurst', source: 'recipe' }]);
+    const item = await db.items.where('listId').equals(list.id!).first();
+    expect(item).toMatchObject({ name: 'Hackfleisch', quantity: '750 g', note: 'für Lasagne', source: 'recipe' });
   });
 
   it('Sicherung lässt sich exportieren und wieder einspielen', async () => {

@@ -1,4 +1,4 @@
-import { Loader2, Sparkles, Type } from 'lucide-react';
+import { ChefHat, Loader2, Sparkles, Type } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { addItems, classify, type OcrMode } from '../db/repo';
 import type { CategoryId } from '../domain/categories';
@@ -26,12 +26,14 @@ export function PhotoImport({
   apiKey,
   ocrMode,
   onClose,
+  onDish,
   onDone,
 }: {
   listId: number;
   apiKey?: string;
   ocrMode: OcrMode;
   onClose: () => void;
+  onDish: () => void;
   onDone: (added: number) => void;
 }) {
   const [useAi, setUseAi] = useState(isAiAvailable(apiKey, ocrMode));
@@ -118,9 +120,14 @@ export function PhotoImport({
                 Offline-Texterkennung aktiv. Für Handschrift empfiehlt sich die KI-Erkennung – einrichten unter <a href="#/settings">Mehr → Texterkennung</a>.
               </div>
             )}
-            <button className="btn ghost" onClick={() => setStep({ kind: 'text' })}>
-              <Type size={18} /> Stattdessen Text einfügen
-            </button>
+            <div className="grid-2">
+              <button className="btn ghost" onClick={() => setStep({ kind: 'text' })}>
+                <Type size={18} /> Text einfügen
+              </button>
+              <button className="btn ghost" onClick={onDish}>
+                <ChefHat size={18} /> Gericht
+              </button>
+            </div>
           </>
         )}
 

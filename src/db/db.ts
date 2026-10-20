@@ -6,6 +6,7 @@ import type {
   Product,
   Receipt,
   ReceiptItem,
+  Recipe,
   Setting,
   ShoppingList,
   Store,
@@ -21,6 +22,7 @@ export class AppDB extends Dexie {
   categoryMemory!: Table<CategoryMemory, string>;
   checkEvents!: Table<CheckEvent, number>;
   settings!: Table<Setting, string>;
+  recipes!: Table<Recipe, number>;
 
   constructor(name = 'adsimobuy') {
     super(name);
@@ -34,6 +36,9 @@ export class AppDB extends Dexie {
       categoryMemory: 'key',
       checkEvents: '++id, storeId, tripKey, at',
       settings: 'key',
+    });
+    this.version(2).stores({
+      recipes: '++id, updatedAt',
     });
   }
 }

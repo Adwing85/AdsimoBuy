@@ -1,4 +1,5 @@
 import type { CategoryId } from '../domain/categories';
+import type { Ingredient } from '../domain/recipes';
 import type { ChainId } from '../domain/stores';
 
 /** Nährwerte je 100 g bzw. 100 ml. */
@@ -50,7 +51,7 @@ export interface ShoppingList {
   updatedAt: number;
 }
 
-export type ItemSource = 'manual' | 'photo' | 'barcode' | 'suggestion' | 'text';
+export type ItemSource = 'manual' | 'photo' | 'barcode' | 'suggestion' | 'text' | 'recipe';
 
 export interface ListItem {
   id?: number;
@@ -122,4 +123,19 @@ export interface CheckEvent {
 export interface Setting {
   key: string;
   value: unknown;
+}
+
+/** Ein erkanntes Gericht, damit es ohne neuen KI-Aufruf wieder auf die Liste kann. */
+export interface Recipe {
+  id?: number;
+  name: string;
+  baseServings: number;
+  ingredients: Ingredient[];
+  /** Kleines Vorschaubild des Fotos. */
+  image?: Blob;
+  notes?: string;
+  source: 'photo' | 'text';
+  usedCount: number;
+  createdAt: number;
+  updatedAt: number;
 }

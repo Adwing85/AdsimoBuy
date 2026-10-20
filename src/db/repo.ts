@@ -3,7 +3,7 @@ import { defaultOrderFor, type ChainId, CHAINS } from '../domain/stores';
 import { dayKey, normalize, prettifyName, round2 } from '../domain/text';
 import type { OffProduct } from '../services/openFoodFacts';
 import { db, type AppDB } from './db';
-import type { ItemSource, ListItem, Product, Receipt, ReceiptItem, Store } from './types';
+import type { ItemSource, ListItem, Product, Receipt, ReceiptItem, Recipe, Store } from './types';
 
 // ---------- Einstellungen ----------
 
@@ -13,6 +13,8 @@ export interface AppSettings {
   activeListId?: number;
   ocrMode: OcrMode;
   apiKey?: string;
+  /** Zuletzt gewählte Portionszahl für Gerichte. */
+  servings?: number;
 }
 
 export async function getSetting<K extends keyof AppSettings>(key: K): Promise<AppSettings[K] | undefined> {
@@ -177,6 +179,7 @@ async function refreshLastPrice(productId: number): Promise<void> {
 export interface NewItem {
   name: string;
   quantity?: string;
+  note?: string;
   category?: CategoryId;
   productId?: number;
   source: ItemSource;
@@ -199,6 +202,7 @@ export async function addItems(listId: number, entries: NewItem[]): Promise<numb
         listId,
         name,
         quantity: entry.quantity?.trim() || undefined,
+        note: entry.note?.trim() || undefined,
         category,
         productId: product?.id,
         checked: 0,
@@ -429,6 +433,24 @@ export async function deleteReceipt(id: number): Promise<void> {
   }
 }
 
+// ---------- Gerichte ----------
+
+/** Speichert ein erkanntes Gericht; ein gleichnamiges wird überschrieben. */
+export async function saveRecipe(recipe: Omit<Recipe, 'id' | 'createdAt' | 'updatedAt' | 'usedCount'>): Promise<number> {
+  const now = Date.now();
+  const existing = await db.recipes.filter((r) => normalize(r.name) === normalize(recipe.name)).first();
+  if (existing?.id) {
+    await db.recipes.update(existing.id, { ...recipe, image: recipe.image ?? existing.image, updatedAt: now });
+    return existing.id;
+  }
+  return db.recipes.add({ ...recipe, usedCount: 0, createdAt: now, updatedAt: now });
+}
+
+export async function markRecipeUsed(id: number): Promise<void> {
+  const recipe = await db.recipes.get(id);
+  if (recipe) await db.recipes.update(id, { usedCount: recipe.usedCount + 1, updatedAt: Date.now() });
+}
+
 // ---------- Sicherung ----------
 
 interface Backup {
@@ -438,7 +460,7 @@ interface Backup {
   tables: Record<string, unknown[]>;
 }
 
-const BACKUP_TABLES = ['products', 'lists', 'items', 'stores', 'receipts', 'receiptItems', 'categoryMemory', 'checkEvents', 'settings'] as const;
+const BACKUP_TABLES = ['products', 'lists', 'items', 'stores', 'receipts', 'receiptItems', 'categoryMemory', 'checkEvents', 'settings', 'recipes'] as const;
 
 export async function exportBackup(): Promise<Blob> {
   const tables: Backup['tables'] = {};
@@ -447,6 +469,8 @@ export async function exportBackup(): Promise<Blob> {
     tables[name] =
       name === 'receipts'
         ? rows.map(({ image: _image, ...rest }: Receipt) => rest)
+        : name === 'recipes'
+          ? rows.map(({ image: _image, ...rest }: Recipe) => rest)
         : name === 'settings'
           ? rows.filter((r: { key: string }) => r.key !== 'apiKey')
           : rows;
